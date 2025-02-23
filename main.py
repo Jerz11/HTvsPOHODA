@@ -236,38 +236,52 @@ def compare_reports(df_ht, df_fv):
     
     TODO: Oddělit doklady společné a nespárované, přidat řádek se součtem částek.
     """
-    # Použijeme inner join, tedy pouze doklady přítomné v obou reportech
-    merged = pd.merge(df_ht, df_fv, on="Doklad", how="inner")
+    # Použijeme outer join pro získání všech dokladů
+    merged = pd.merge(df_ht, df_fv, on="Doklad", how="outer")
+    
     # Převedeme sloupce s částkami na typ číslo
     merged["Částka HT"] = pd.to_numeric(merged["Částka HT"], errors='coerce')
     merged["Částka FV"] = pd.to_numeric(merged["Částka FV"], errors='coerce')
+    
     # Vektorově spočteme rozdíl obou částek: Pohoda minus HotelTime
     merged["Rozdíl"] = merged["Částka FV"] - merged["Částka HT"]
-    # Použijeme pomocný sloupec pro numerické řazení, ale ponecháme původní textovou hodnotu "Doklad" (s leading zeros)
+    
+    # Přidáme sloupec pro označení typu řádku
+    merged["Status"] = "Nespárovaný"
+    merged.loc[merged["Částka HT"].notna() & merged["Částka FV"].notna(), "Status"] = "Spárovaný"
+    
+    # Použijeme pomocný sloupec pro numerické řazení
     merged["Doklad_sort"] = pd.to_numeric(merged["Doklad"], errors='coerce')
-    merged.sort_values(by="Doklad_sort", inplace=True)
+    
+    # Seřadíme nejdřív podle statusu (spárované nahoře) a pak podle čísla dokladu
+    merged.sort_values(by=["Status", "Doklad_sort"], ascending=[True, True], inplace=True)
     merged.drop(columns=["Doklad_sort"], inplace=True)
-    # Změníme názvy sloupců dle požadavku: název "Částka HT" nahradíme "Částka HotelTime" (bez mezery)
+    
+    # Změníme názvy sloupců
     merged.rename(columns={
-         "Částka HT": "Částka HotelTime",
-         "Částka FV": "Částka Pohoda"
+        "Částka HT": "Částka HotelTime",
+        "Částka FV": "Částka Pohoda"
     }, inplace=True)
+    
     # Odebereme sloupec DUZP, pokud existuje
     if "DUZP" in merged.columns:
-         merged = merged.drop(columns=["DUZP"])
-    # Uspořádáme sloupce: Doklad, případně Odběratel, Částka HotelTime, Částka Pohoda, Rozdíl
+        merged = merged.drop(columns=["DUZP"])
+    
+    # Uspořádáme sloupce
     cols_order = []
     if "Doklad" in merged.columns:
-         cols_order.append("Doklad")
+        cols_order.append("Doklad")
     if "Odběratel" in merged.columns:
-         cols_order.append("Odběratel")
+        cols_order.append("Odběratel")
     if "Částka HotelTime" in merged.columns:
-         cols_order.append("Částka HotelTime")
+        cols_order.append("Částka HotelTime")
     if "Částka Pohoda" in merged.columns:
-         cols_order.append("Částka Pohoda")
+        cols_order.append("Částka Pohoda")
     if "Rozdíl" in merged.columns:
-         cols_order.append("Rozdíl")
+        cols_order.append("Rozdíl")
+    cols_order.append("Status")
     merged = merged[cols_order]
+    
     return merged
 
 def export_reports(df_ht_raw, df_fv_raw, differences):
